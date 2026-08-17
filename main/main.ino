@@ -51,6 +51,8 @@ void connectWiFi() {
 
   Serial.print("Menghubungkan ke WiFi");
 
+  bool ledState = false;
+
   while (WiFi.status() != WL_CONNECTED) {
 
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -59,9 +61,10 @@ void connectWiFi() {
 
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
 
-      digitalWrite(LED1_PIN, !digitalRead(LED1_PIN));
-      digitalWrite(LED2_PIN, !digitalRead(LED2_PIN));
-      digitalWrite(LED3_PIN, !digitalRead(LED3_PIN));
+      ledState = !ledState;
+      digitalWrite(LED1_PIN, ledState);
+      digitalWrite(LED2_PIN, ledState);
+      digitalWrite(LED3_PIN, ledState);
 
       delay(500);
       Serial.print(".");
@@ -91,12 +94,14 @@ void reconnectWiFi() {
   WiFi.reconnect();
 
   int attempts = 0;
+  bool ledState = false;
 
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
 
-    digitalWrite(LED1_PIN, !digitalRead(LED1_PIN));
-    digitalWrite(LED2_PIN, !digitalRead(LED2_PIN));
-    digitalWrite(LED3_PIN, !digitalRead(LED3_PIN));
+    ledState = !ledState;
+    digitalWrite(LED1_PIN, ledState);
+    digitalWrite(LED2_PIN, ledState);
+    digitalWrite(LED3_PIN, ledState);
 
     delay(500);
     Serial.print(".");
@@ -168,7 +173,8 @@ void sendWeightUpdate(int weight) {
   http.begin(client, API_URL);
   http.addHeader("Content-Type", "application/json");
 
-  String payload = String("{\"container_id\":\"") + CONTAINER_ID + "\",\"weight\":" + weight + "}";
+  char payload[96];
+  snprintf(payload, sizeof(payload), "{\"container_id\":\"%s\",\"weight\":%d}", CONTAINER_ID, weight);
 
   int httpCode = http.POST(payload);
 
@@ -231,23 +237,8 @@ void handleWeight() {
   }
 
   // ================= SERIAL =================
-  Serial.print("RAW1 : ");
-  Serial.print(raw1);
-
-  Serial.print("   Beban1 : ");
-  Serial.print(weight1, 2);
-  Serial.print(" g");
-
-  Serial.print(" || RAW2 : ");
-  Serial.print(raw2);
-
-  Serial.print("   Beban2 : ");
-  Serial.print(weight2, 2);
-  Serial.print(" g");
-
-  Serial.print(" || Total : ");
-  Serial.print(totalWeight, 2);
-  Serial.println(" g");
+  Serial.printf("RAW1 : %ld   Beban1 : %.2f g || RAW2 : %ld   Beban2 : %.2f g || Total : %.2f g\n",
+                raw1, weight1, raw2, weight2, totalWeight);
 
   // ================= TM1637 =================
   int tampil = (int)floor(totalWeight);   // pembulatan
