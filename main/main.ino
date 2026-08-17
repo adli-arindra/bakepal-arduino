@@ -152,18 +152,34 @@ void fetchThreshold() {
 
   if (httpCode == 200) {
     String body = http.getString();
-    int idx = body.indexOf("threshold");
+
+    Serial.print("Threshold response body : ");
+    Serial.println(body);
+
+    body.trim();
+
+    int idx = body.indexOf("\"threshold\"");
 
     if (idx != -1) {
+      // Body berupa objek JSON, mis. {"threshold":100}
       int colonIdx = body.indexOf(':', idx);
+      int valueIdx = colonIdx + 1;
 
-      if (colonIdx != -1) {
-        weightThreshold = body.substring(colonIdx + 1).toFloat();
-
-        if (weightThreshold < 0)
-          weightThreshold = 0.0;
+      // Lewati spasi dan tanda kutip sebelum angka (mis. "threshold":"100")
+      while (valueIdx < (int)body.length() &&
+             (body[valueIdx] == ' ' || body[valueIdx] == '"')) {
+        valueIdx++;
       }
+
+      weightThreshold = body.substring(valueIdx).toFloat();
     }
+    else {
+      // Body berupa angka polos, mis. 100.0
+      weightThreshold = body.toFloat();
+    }
+
+    if (weightThreshold < 0)
+      weightThreshold = 0.0;
   }
 
   http.end();
