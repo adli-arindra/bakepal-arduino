@@ -10,8 +10,8 @@ const char* WIFI_PASSWORD = "123456789";
 
 // ================= API =================
 const char* API_URL = "https://backend-bakepal-production.up.railway.app/containers/weight";
-const char* DEVICE_KEY = "1";
-const float WEIGHT_CHANGE_THRESHOLD = 2.0;
+const char* CONTAINER_ID = "1";
+const float WEIGHT_CHANGE_THRESHOLD = 0.5;
 
 // ================= HX711 =================
 #define DT1_PIN 18
@@ -168,7 +168,7 @@ void sendWeightUpdate(int weight) {
   http.begin(client, API_URL);
   http.addHeader("Content-Type", "application/json");
 
-  String payload = String("{\"device_key\":\"") + DEVICE_KEY + "\",\"weight\":" + weight + "}";
+  String payload = String("{\"container_id\":\"") + CONTAINER_ID + "\",\"weight\":" + weight + "}";
 
   int httpCode = http.POST(payload);
 
