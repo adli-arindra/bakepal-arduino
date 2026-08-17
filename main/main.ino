@@ -186,25 +186,48 @@ void sendWeightUpdate(int weight) {
 
 void handleWeight() {
 
+  const int SAMPLES = 20;
+
   float weight1 = 0;
   float weight2 = 0;
 
   long raw1 = 0;
   long raw2 = 0;
 
+  // ================= BACA KEDUA LOAD CELL SECARA INTERLEAVED =================
+  // Kedua chip HX711 melakukan konversi secara independen/paralel, jadi
+  // membaca keduanya bergantian (bukan berurutan penuh) memangkas total
+  // waktu tunggu blocking menjadi ~separuhnya, tanpa mengubah sampel atau
+  // rumus rata-rata yang dipakai.
+  bool ready1 = scale1.is_ready();
+  bool ready2 = scale2.is_ready();
+
+  double sum1 = 0;
+  double sum2 = 0;
+
+  for (int i = 0; i < SAMPLES; i++) {
+    if (ready1)
+      sum1 += scale1.read();
+
+    if (ready2)
+      sum2 += scale2.read();
+  }
+
   // ================= LOAD CELL 1 =================
-  if (scale1.is_ready()) {
-    raw1 = scale1.read();
-    weight1 = scale1.get_units(20);
+  if (ready1) {
+    double avg1 = sum1 / SAMPLES;
+    raw1 = (long)avg1;
+    weight1 = (avg1 - scale1.get_offset()) / calibration_factor1;
 
     if (weight1 < 0)
       weight1 = 0;
   }
 
   // ================= LOAD CELL 2 =================
-  if (scale2.is_ready()) {
-    raw2 = scale2.read();
-    weight2 = scale2.get_units(20);
+  if (ready2) {
+    double avg2 = sum2 / SAMPLES;
+    raw2 = (long)avg2;
+    weight2 = (avg2 - scale2.get_offset()) / calibration_factor2;
 
     if (weight2 < 0)
       weight2 = 0;
@@ -250,8 +273,9 @@ void handleWeight() {
     tampil = 9999;
 
   // Display hanya berubah setiap 2 detik
-  if (millis() - lastDisplayUpdate >= 2000) {
-    lastDisplayUpdate = millis();
+  unsigned long now = millis();
+  if (now - lastDisplayUpdate >= 2000) {
+    lastDisplayUpdate = now;
     display.showNumberDec(tampil, false);   // false = dot mati
   }
 
