@@ -250,7 +250,7 @@ void handleWeight() {
   Serial.println(" g");
 
   // ================= TM1637 =================
-  int tampil = (int)(totalWeight + 0.5);   // pembulatan
+  int tampil = (int)floor(totalWeight);   // pembulatan
 
   if (tampil < 0)
     tampil = 0;
