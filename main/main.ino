@@ -10,8 +10,12 @@ const char* WIFI_PASSWORD = "123456789";
 
 // ================= API =================
 const char* API_URL = "https://backend-bakepal-production.up.railway.app/containers/weight";
+const char* THRESHOLD_API_URL_BASE = "https://backend-bakepal-production.up.railway.app/containers/threshold/";
 const char* CONTAINER_ID = "1";
 const float WEIGHT_CHANGE_THRESHOLD = 0.5;
+
+// Ambang batas berat (diambil dari API saat startup). 0 = belum/tidak ada ambang batas.
+float weightThreshold = 0.0;
 
 // ================= HX711 =================
 #define DT1_PIN 18
@@ -41,9 +45,9 @@ float lastSentWeight = 0;
 bool hasSentWeight = false;
 
 // ================= LED =================
-#define LED1_PIN 4    // 10g - 500g
-#define LED2_PIN 13   // <10g
-#define LED3_PIN 16   // >500g
+#define LED1_PIN 4    // merah  - weight < 50g
+#define LED2_PIN 13   // kuning - 50g <= weight < threshold
+#define LED3_PIN 16   // hijau  - weight >= threshold
 
 void connectWiFi() {
 
@@ -123,6 +127,51 @@ void reconnectWiFi() {
   }
 }
 
+void fetchThreshold() {
+
+  if (WiFi.status() != WL_CONNECTED) {
+    weightThreshold = 0.0;
+    return;
+  }
+
+  WiFiClientSecure client;
+  client.setInsecure();   // skip cert validation
+
+  HTTPClient http;
+  String url = String(THRESHOLD_API_URL_BASE) + CONTAINER_ID;
+  http.begin(client, url);
+
+  int httpCode = http.GET();
+
+  Serial.print("GET /containers/threshold/");
+  Serial.print(CONTAINER_ID);
+  Serial.print(" -> ");
+  Serial.println(httpCode);
+
+  weightThreshold = 0.0;
+
+  if (httpCode == 200) {
+    String body = http.getString();
+    int idx = body.indexOf("threshold");
+
+    if (idx != -1) {
+      int colonIdx = body.indexOf(':', idx);
+
+      if (colonIdx != -1) {
+        weightThreshold = body.substring(colonIdx + 1).toFloat();
+
+        if (weightThreshold < 0)
+          weightThreshold = 0.0;
+      }
+    }
+  }
+
+  http.end();
+
+  Serial.print("Ambang batas berat : ");
+  Serial.println(weightThreshold);
+}
+
 void setup() {
 
   Serial.begin(115200);
@@ -138,6 +187,9 @@ void setup() {
 
   // ================= WIFI =================
   connectWiFi();
+
+  // ================= THRESHOLD =================
+  fetchThreshold();
 
   // ================= TM1637 =================
   display.setBrightness(7);   // 0-7
@@ -237,25 +289,25 @@ void handleWeight() {
   float totalWeight = weight1 + weight2;
 
   // ================= LOGIKA LED =================
-  if (totalWeight < 10.0) {
+  if (totalWeight < 50.0) {
 
-    digitalWrite(LED2_PIN, HIGH);
-    digitalWrite(LED1_PIN, LOW);
+    digitalWrite(LED1_PIN, HIGH);
+    digitalWrite(LED2_PIN, LOW);
     digitalWrite(LED3_PIN, LOW);
 
   }
-  else if (totalWeight > 500.0) {
+  else if (totalWeight < weightThreshold) {
 
-    digitalWrite(LED2_PIN, LOW);
     digitalWrite(LED1_PIN, LOW);
-    digitalWrite(LED3_PIN, HIGH);
+    digitalWrite(LED2_PIN, HIGH);
+    digitalWrite(LED3_PIN, LOW);
 
   }
   else {
 
+    digitalWrite(LED1_PIN, LOW);
     digitalWrite(LED2_PIN, LOW);
-    digitalWrite(LED1_PIN, HIGH);
-    digitalWrite(LED3_PIN, LOW);
+    digitalWrite(LED3_PIN, HIGH);
 
   }
 
