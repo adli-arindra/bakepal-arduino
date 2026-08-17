@@ -1,10 +1,17 @@
 #include "HX711.h"
 #include <TM1637Display.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 
 // ================= WIFI =================
 const char* WIFI_SSID = "Hans M";
 const char* WIFI_PASSWORD = "123456789";
+
+// ================= API =================
+const char* API_URL = "https://backend-bakepal-production.up.railway.app/containers/weight";
+const char* DEVICE_KEY = "1";
+const float WEIGHT_CHANGE_THRESHOLD = 2.0;
 
 // ================= HX711 =================
 #define DT1_PIN 18
@@ -29,6 +36,10 @@ TM1637Display display(TM_CLK, TM_DIO);
 // Update display setiap 2 detik
 unsigned long lastDisplayUpdate = 0;
 
+// Berat terakhir yang dikirim ke server
+float lastSentWeight = 0;
+bool hasSentWeight = false;
+
 // ================= LED =================
 #define LED1_PIN 4    // 10g - 500g
 #define LED2_PIN 13   // <10g
@@ -37,9 +48,47 @@ unsigned long lastDisplayUpdate = 0;
 void connectWiFi() {
 
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   Serial.print("Menghubungkan ke WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    int attempts = 0;
+
+    while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+
+      digitalWrite(LED1_PIN, !digitalRead(LED1_PIN));
+      digitalWrite(LED2_PIN, !digitalRead(LED2_PIN));
+      digitalWrite(LED3_PIN, !digitalRead(LED3_PIN));
+
+      delay(500);
+      Serial.print(".");
+      attempts++;
+    }
+
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println();
+      Serial.println("WiFi gagal terhubung. Mencoba lagi...");
+    }
+  }
+
+  digitalWrite(LED1_PIN, LOW);
+  digitalWrite(LED2_PIN, LOW);
+  digitalWrite(LED3_PIN, LOW);
+
+  Serial.println();
+  Serial.print("WiFi terhubung. IP : ");
+  Serial.println(WiFi.localIP());
+}
+
+void reconnectWiFi() {
+
+  Serial.println("Koneksi WiFi terputus. Mencoba menghubungkan ulang...");
+
+  WiFi.disconnect();
+  WiFi.reconnect();
 
   int attempts = 0;
 
@@ -60,19 +109,12 @@ void connectWiFi() {
 
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println();
-    Serial.print("WiFi terhubung. IP : ");
+    Serial.print("WiFi terhubung kembali. IP : ");
     Serial.println(WiFi.localIP());
   }
   else {
     Serial.println();
-    Serial.println("WiFi gagal terhubung. LED akan berkedip terus.");
-
-    while (true) {
-      digitalWrite(LED1_PIN, !digitalRead(LED1_PIN));
-      digitalWrite(LED2_PIN, !digitalRead(LED2_PIN));
-      digitalWrite(LED3_PIN, !digitalRead(LED3_PIN));
-      delay(300);
-    }
+    Serial.println("WiFi belum terhubung kembali, akan dicoba lagi.");
   }
 }
 
@@ -112,6 +154,28 @@ void setup() {
   Serial.println("Tare selesai.");
 
   delay(1000);
+}
+
+void sendWeightUpdate(int weight) {
+
+  if (WiFi.status() != WL_CONNECTED)
+    return;
+
+  WiFiClientSecure client;
+  client.setInsecure();   // skip cert validation
+
+  HTTPClient http;
+  http.begin(client, API_URL);
+  http.addHeader("Content-Type", "application/json");
+
+  String payload = String("{\"device_key\":\"") + DEVICE_KEY + "\",\"weight\":" + weight + "}";
+
+  int httpCode = http.POST(payload);
+
+  Serial.print("POST /containers/weight -> ");
+  Serial.println(httpCode);
+
+  http.end();
 }
 
 void handleWeight() {
@@ -199,9 +263,22 @@ void handleWeight() {
     lastDisplayUpdate = millis();
     display.showNumberDec(tampil, false);   // false = dot mati
   }
+
+  // ================= KIRIM KE SERVER =================
+  if (!hasSentWeight || fabs(totalWeight - lastSentWeight) > WEIGHT_CHANGE_THRESHOLD) {
+    sendWeightUpdate(tampil);
+    lastSentWeight = totalWeight;
+    hasSentWeight = true;
+  }
 }
 
 void loop() {
+
+  if (WiFi.status() != WL_CONNECTED) {
+    reconnectWiFi();
+    return;
+  }
+
   handleWeight();
 
   delay(100);
